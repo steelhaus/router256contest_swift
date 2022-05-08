@@ -1,5 +1,8 @@
+/// Insertion via bsearch was used to reduce time of searching min remaining time due to reduce total time cost
+/// Was kinda lazy to write it by myself. Taken from here:. Pretty easy though.
+/// https://stackoverflow.com/questions/26678362/how-do-i-insert-an-element-at-the-correct-position-into-a-sorted-array-in-swift
 extension Array {
-    func insertionIndexOf(_ elem: Element, isOrderedBefore: (Element, Element) -> Bool) -> Int {
+    mutating func insertViaBSearch(_ elem: Element, isOrderedBefore: (Element, Element) -> Bool){
         var lo = 0
         var hi = self.count - 1
         while lo <= hi {
@@ -9,12 +12,52 @@ extension Array {
             } else if isOrderedBefore(elem, self[mid]) {
                 hi = mid - 1
             } else {
-                return mid // found at position mid
+                insert(elem, at: mid)
+                return
             }
         }
-        return lo // not found, would be inserted at position lo
+        insert(elem, at: lo)
     }
 }
+
+class Queue {
+    /// Available threads count
+    private let threadsLimit: Int
+    /// Duration remains for different tasks (tasks order does not matter)
+    private var threadsRemains: [Int] = []
+
+    /// Timer of the queue
+    var currentTime: Int = 1
+
+    init(threadsLimit: Int) {
+        self.threadsLimit = threadsLimit
+    }
+
+    // Add task
+    func addTask(start: Int, duration: Int) {
+        waitUntilReadyToAcceptTaskAt(start)
+        threadsRemains.insertViaBSearch(duration) { $0 < $1 }
+    }
+
+    /// Wait until at least one thread is free or the task start time comes.
+    private func waitUntilReadyToAcceptTaskAt(_ start: Int) {
+        let timeBeforeStart = max(start - currentTime, 0)
+        let timeBeforeQueueGetsAvailable = threadsRemains.count >= threadsLimit ? threadsRemains[0] : 0
+        let timeToWait = max(timeBeforeStart, timeBeforeQueueGetsAvailable)
+        if timeToWait > 0 {
+            wait(timeToWait)
+        }
+    }
+
+    private func wait(_ duration: Int) {
+        currentTime += duration
+        threadsRemains = threadsRemains.map { $0 - duration }
+        threadsRemains.removeAll { $0 <= 0 }
+    }
+}
+
+
+// MARK: - Parsing
 
 struct Task {
     let start: Int
@@ -26,89 +69,7 @@ struct QueueInfo {
     let tasksCount: Int
 }
 
-class Queue {
-    private let threadsLimit: Int
-
-    /// Minimum duration of all added tasks
-//    private var minDuration: Int = 0
-    /// Duration remains for different tasks (tasks order does not matter)
-    private var threadsRemains: [Int] = []
-
-    var currentTime: Int = 1
-
-    init(threadsLimit: Int) {
-        self.threadsLimit = threadsLimit
-    }
-
-    func waitUntilReadyToAcceptTaskAt(_ start: Int) {
-        let timeBeforeStart = max(start - currentTime, 0)
-        let timeBeforeQueueGetsAvailable = threadsRemains.count >= threadsLimit ? threadsRemains[0] : 0
-        let timeToWait = max(timeBeforeStart, timeBeforeQueueGetsAvailable)
-        if timeToWait > 0 {
-            wait(timeToWait)
-        }
-//        let timeToWait = max(start - currentTime, 0)
-//        if threadsRemains.count >= threadsLimit {
-//            wait(threadsRemains[0])
-//        }
-//        if start > currentTime {
-//            wait(start - currentTime)
-//        }
-    }
-
-    func addTask(duration: Int) {
-        let index = threadsRemains.insertionIndexOf(duration) { $0 < $1 }
-        threadsRemains.insert(duration, at: index)
-//        minDuration = minDuration == 0 ? duration : min(minDuration, duration)
-////        minDuration = min(minDuration, duration)
-//        threadsRemains.append(duration)
-    }
-
-    private func wait(_ duration: Int) {
-//        print("------")
-//        print("wait for: \(duration)")
-//        print(threadsRemains)
-        currentTime += duration
-        threadsRemains = threadsRemains.map { $0 - duration }
-        threadsRemains.removeAll { $0 <= 0 }
-//        minDuration = threadsRemains.min() ?? 0
-//        print("min duration remains: \(minDuration)")
-//        print(threadsRemains)
-    }
-}
-
-class Data {
-
-    static var currentIndex: Int = 0
-    let queueInfo = QueueInfo(threads: 1, tasksCount: 5)
-    let tasks: [Task] = [
-        // Set 1
-//        .init(start: 1, duration: 10),
-//        .init(start: 2, duration: 9),
-//        .init(start: 3, duration: 8),
-//        .init(start: 4, duration: 7),
-//        .init(start: 5, duration: 6)
-
-        // Set 2
-        .init(start: 1, duration: 10),
-        .init(start: 2, duration: 9),
-        .init(start: 3, duration: 8),
-        .init(start: 4, duration: 7),
-        .init(start: 5, duration: 6)
-    ]
-
-    func getNextTask() -> Task {
-        let task = tasks[Data.currentIndex]
-        Data.currentIndex += 1
-        return task
-    }
-
-}
-
-let data = Data()
-
 func readInt() -> Int {
-//    return 1
     Int(readLine()!)!
 }
 
@@ -117,17 +78,16 @@ func readEmpty() {
 }
 
 func readQueueInfo() -> QueueInfo {
-//    data.queueInfo
     let rawLine = readLine()!.split(separator: " ")
     return QueueInfo(threads: Int(rawLine[0])!, tasksCount: Int(rawLine[1])!)
 }
 
 func readNextTask() -> Task {
-//    data.getNextTask()
     let rawLine = readLine()!.split(separator: " ")
     return Task(start: Int(rawLine[0])!, duration: Int(rawLine[1])!)
 }
 
+// MARK: - main
 
 func handleNextDataSet() {
     let queueInfo = readQueueInfo()
@@ -136,8 +96,8 @@ func handleNextDataSet() {
     var endings = Array(repeating: 0, count: queueInfo.tasksCount)
     for idx in 0 ..< queueInfo.tasksCount {
         let task = readNextTask()
-        queue.waitUntilReadyToAcceptTaskAt(task.start)
-        queue.addTask(duration: task.duration)
+//        queue.waitUntilReadyToAcceptTaskAt(task.start)
+        queue.addTask(start: task.start, duration: task.duration)
         endings[idx] = queue.currentTime + task.duration
     }
 
